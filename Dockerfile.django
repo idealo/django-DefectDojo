@@ -1,7 +1,7 @@
 
 # code: language=Dockerfile
 
-# The code for the build image should be idendical with the code in
+# The code for the build image should be identical with the code in
 # Dockerfile.nginx to use the caching mechanism of Docker.
 
 # Ref: https://devguide.python.org/#branchstatus
@@ -17,6 +17,7 @@ RUN \
     postgresql-client \
     xmlsec1 \
     git \
+    uuid-runtime \
     && \
   apt-get clean && \
   rm -rf /var/lib/apt/lists && \
@@ -43,13 +44,14 @@ RUN \
     libmariadb3 \
     xmlsec1 \
     git \
+    uuid-runtime \
     # only required for the dbshell (used by the initializer job)
     postgresql-client \
+    curl \
     && \
   apt-get clean && \
   rm -rf /var/lib/apt/lists && \
   true
-RUN pip3 install --no-cache-dir --upgrade pip
 COPY --from=build /tmp/wheels /tmp/wheels
 COPY requirements.txt ./
 RUN pip3 install \
@@ -57,6 +59,7 @@ RUN pip3 install \
 	--no-index \
   --find-links=/tmp/wheels \
   -r ./requirements.txt
+
 COPY \
   docker/entrypoint-celery-beat.sh \
   docker/entrypoint-celery-worker.sh \
@@ -67,15 +70,23 @@ COPY \
   docker/entrypoint-unit-tests.sh \
   docker/entrypoint-unit-tests-devDocker.sh \
   docker/wait-for-it.sh \
-  certs/* \
+  docker/certs/* \
   /
-COPY wsgi.py manage.py tests/unit-tests.sh ./
+COPY wsgi.py manage.py docker/unit-tests.sh ./
 COPY dojo/ ./dojo/
-# Legacy installs need the modified settings.py, do not remove!
-RUN \
-  cp dojo/settings/settings.dist.py dojo/settings/settings.py
+
+# Add extra fixtures to docker image which are loaded by the initializer
+COPY docker/extra_fixtures/* /app/dojo/fixtures/
+
+# Fallback for safety parser, if installation does't allow internet connectivity
+RUN curl -sS -o dojo/tools/safety/insecure_full.json https://raw.githubusercontent.com/pyupio/safety-db/master/data/insecure_full.json
+
 COPY tests/ ./tests/
 RUN \
+  # Remove placeholder copied from docker/certs
+  rm -f /readme.txt && \
+  # Remove placeholder copied from docker/extra_fixtures
+  rm -f dojo/fixtures/readme.txt && \
   mkdir -p dojo/migrations && \
   chmod g=u dojo/migrations && \
   true
@@ -86,9 +97,12 @@ RUN \
     chown -R ${appuser} /app && \
     chmod 0700 /app && \
     chmod 0750 -R /app/* && \
+	chmod g=u /app && \
+	chmod -R g=u /app/* && \
     mkdir /var/run/${appuser} && \
-    chown ${appuser} /var/run/${appuser}
-USER ${appuser}
+    chown ${appuser} /var/run/${appuser} && \
+	chmod g=u /var/run/${appuser}
+USER ${uid}
 ENV \
   DD_ADMIN_USER=admin \
   DD_ADMIN_MAIL=admin@defectdojo.local \

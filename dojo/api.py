@@ -1,7 +1,10 @@
 # see tastypie documentation at http://django-tastypie.readthedocs.org/en
 from django.core.exceptions import ImproperlyConfigured, ValidationError
+from django.http import HttpResponse
 from django.urls import resolve, get_script_prefix
+import base64
 from tastypie import fields
+from tastypie import http
 from tastypie.fields import RelatedField
 from tastypie.authentication import ApiKeyAuthentication
 from tastypie.authorization import Authorization
@@ -9,22 +12,26 @@ from tastypie.authorization import DjangoAuthorization
 from tastypie.constants import ALL, ALL_WITH_RELATIONS
 from tastypie.exceptions import Unauthorized, ImmediateHttpResponse, NotFound
 from tastypie.http import HttpCreated
-from tastypie.resources import ModelResource, Resource
+from tastypie.resources import ModelResource, Resource, sanitize
 from tastypie.serializers import Serializer
 from tastypie.validation import FormValidation, Validation
+from tastypie.exceptions import BadRequest
 from django.urls.exceptions import Resolver404
 from django.utils import timezone
 from django.db.models import Count, Q
-
+from django.conf import settings
+from django.utils.cache import patch_cache_control, patch_vary_headers
+from django.views.decorators.csrf import csrf_exempt
 from dojo.models import Product, Engagement, Test, Finding, \
     User, ScanSettings, IPScan, Scan, Stub_Finding, Risk_Acceptance, \
     Finding_Template, Test_Type, Development_Environment, \
-    BurpRawRequestResponse, Endpoint, Notes, JIRA_PKey, JIRA_Conf, \
+    BurpRawRequestResponse, Endpoint, Notes, JIRA_Project, JIRA_Instance, \
     JIRA_Issue, Tool_Product_Settings, Tool_Configuration, Tool_Type, \
-    Languages, Language_Type, App_Analysis, Product_Type, Note_Type
+    Languages, Language_Type, App_Analysis, Product_Type, Note_Type, \
+    Endpoint_Status
 from dojo.forms import ProductForm, EngForm, TestForm, \
     ScanSettingsForm, FindingForm, StubFindingForm, FindingTemplateForm, \
-    ImportScanForm, SEVERITY_CHOICES, JIRAForm, JIRA_PKeyForm, EditEndpointForm, \
+    ImportScanForm, SEVERITY_CHOICES, JIRAForm, JIRAProjectForm, EditEndpointForm, \
     JIRA_IssueForm, ToolConfigForm, ToolProductSettingsForm, \
     ToolTypeForm, LanguagesTypeForm, Languages_TypeTypeForm, App_AnalysisTypeForm, \
     Development_EnvironmentForm, Product_TypeForm, Test_TypeForm, NoteTypeForm
@@ -88,6 +95,78 @@ class ModelFormValidation(FormValidation):
 
 
 class BaseModelResource(ModelResource):
+
+    def wrap_view(self, view):
+        """
+        Wraps views to check if APIv1 is enabled
+        """
+        @csrf_exempt
+        def wrapper(request, *args, **kwargs):
+            try:
+                api_v1_deprecation_warning = 'APIv1 is deprecated and may contain vulnerabilities. It is disabled by default. '
+                if not settings.LEGACY_API_V1_ENABLE:
+                    raise BadRequest({'code': 666, 'message': api_v1_deprecation_warning + 'It can be enabled at your own risk by setting DD_LEGACY_API_V1_ENABLE to True, or by setting LEGACY_API_V1_ENABLE to True in  settings(.dist).py or local_settings.py. APIv1 will be removed at 2021-06-30'})
+
+                callback = getattr(self, view)
+                response = callback(request, *args, **kwargs)
+
+                # Our response can vary based on a number of factors, use
+                # the cache class to determine what we should ``Vary`` on so
+                # caches won't return the wrong (cached) version.
+                varies = getattr(self._meta.cache, "varies", [])
+
+                if varies:
+                    patch_vary_headers(response, varies)
+
+                if self._meta.cache.cacheable(request, response):
+                    if self._meta.cache.cache_control():
+                        # If the request is cacheable and we have a
+                        # ``Cache-Control`` available then patch the header.
+                        patch_cache_control(response, **self._meta.cache.cache_control())
+
+                if request.is_ajax() and not response.has_header("Cache-Control"):
+                    # IE excessively caches XMLHttpRequests, so we're disabling
+                    # the browser cache here.
+                    # See http://www.enhanceie.com/ie/bugs.asp for details.
+                    patch_cache_control(response, no_cache=True)
+
+                # official header for deprecation
+                response['Deprecation'] = 'true'
+
+                # official header for warning (666 is not official)
+                response['Warning'] = '666 APIv1 ' + api_v1_deprecation_warning + 'At your own or your admins risk it has been enabled. APIv1 will be removed at 2021-06-30'
+
+                return response
+            except (BadRequest, fields.ApiFieldError) as e:
+                data = {"error": sanitize(e.args[0]) if getattr(e, 'args') else ''}
+                return self.error_response(request, data, response_class=http.HttpBadRequest)
+            except ValidationError as e:
+                data = {"error": sanitize(e.messages)}
+                return self.error_response(request, data, response_class=http.HttpBadRequest)
+            except Exception as e:
+                # Prevent muting non-django's exceptions
+                # i.e. RequestException from 'requests' library
+                if hasattr(e, 'response') and isinstance(e.response, HttpResponse):
+                    return e.response
+
+                # A real, non-expected exception.
+                # Handle the case where the full traceback is more helpful
+                # than the serialized error.
+                if settings.DEBUG and getattr(settings, 'TASTYPIE_FULL_DEBUG', False):
+                    raise
+
+                # Re-raise the error to get a proper traceback when the error
+                # happend during a test case
+                if request.META.get('SERVER_NAME') == 'testserver':
+                    raise
+
+                # Rather than re-raising, we're going to things similar to
+                # what Django does. The difference is returning a serialized
+                # error message.
+                return self._handle_500(request, e)
+
+        return wrapper
+
     @classmethod
     def get_fields(cls, fields=None, excludes=None):
         """
@@ -110,6 +189,7 @@ class BaseModelResource(ModelResource):
                 res_field = fields.get(django_field.name, None)
                 if res_field:
                     res_field.blank = True
+
         return fields
 
 
@@ -398,7 +478,7 @@ class ProductResource(BaseModelResource):
         # Append the tags in a comma delimited list with the tag element
         """
         tags = ""
-        for tag in bundle.obj.tags:
+        for tag in bundle.obj.tags.all():
             tags = tags + str(tag) + ","
         if len(tags) > 0:
             tags = tags[:-1]
@@ -492,6 +572,7 @@ class Tool_ConfigurationResource(BaseModelResource):
         }
         authentication = DojoApiKeyAuthentication()
         authorization = DjangoAuthorization()
+        excludes = ['password', 'ssh', 'api_key']
         serializer = Serializer(formats=['json'])
 
         @property
@@ -795,10 +876,10 @@ class EndpointResource(BaseModelResource):
 
 
 """
-    /api/v1/jira_configurations/
+    /api/v1/JIRA_Issues/
     GET [/id/], DELETE [/id/]
-    Expects: no params or JIRA_PKey
-    Returns jira configuration: ALL or by JIRA_PKey
+    Expects: no params or JIRA_Project
+    Returns jira configuration: ALL or by JIRA_Project
 
     POST, PUT [/id/]
 """
@@ -829,8 +910,8 @@ class JIRA_IssueResource(BaseModelResource):
 """
     /api/v1/jira_configurations/
     GET [/id/], DELETE [/id/]
-    Expects: no params or JIRA_PKey
-    Returns jira configuration: ALL or by JIRA_PKey
+    Expects: no params or JIRA_Project
+    Returns jira configuration: ALL or by JIRA_Project
 
     POST, PUT [/id/]
 """
@@ -839,10 +920,10 @@ class JIRA_IssueResource(BaseModelResource):
 class JIRA_ConfResource(BaseModelResource):
 
     class Meta:
-        resource_name = 'jira_configurations'
+        resource_name = 'JIRA_Configurations'
         list_allowed_methods = ['get', 'post', 'put', 'delete']
         detail_allowed_methods = ['get', 'post', 'put', 'delete']
-        queryset = JIRA_Conf.objects.all()
+        queryset = JIRA_Instance.objects.all()
         include_resource_uri = True
         filtering = {
             'id': ALL,
@@ -850,6 +931,7 @@ class JIRA_ConfResource(BaseModelResource):
         }
         authentication = DojoApiKeyAuthentication()
         authorization = DjangoAuthorization()
+        excludes = ['password']
         serializer = Serializer(formats=['json'])
 
         @property
@@ -877,7 +959,7 @@ class JiraResource(BaseModelResource):
         list_allowed_methods = ['get', 'post', 'put', 'delete']
         detail_allowed_methods = ['get', 'post', 'put', 'delete']
 
-        queryset = JIRA_PKey.objects.all()
+        queryset = JIRA_Project.objects.all()
         include_resource_uri = True
         filtering = {
             'id': ALL,
@@ -895,7 +977,7 @@ class JiraResource(BaseModelResource):
 
         @property
         def validation(self):
-            return ModelFormValidation(form_class=JIRA_PKeyForm, resource=JiraResource)
+            return ModelFormValidation(form_class=JIRAProjectForm, resource=JiraResource)
 
 
 """
@@ -1526,7 +1608,6 @@ class ImportScanResource(MultipartResource, Resource):
                     continue
 
                 item.test = t
-                item.date = t.target_start.date()
                 item.reporter = bundle.request.user
                 item.last_reviewed = timezone.now()
                 item.last_reviewed_by = bundle.request.user
@@ -1537,16 +1618,16 @@ class ImportScanResource(MultipartResource, Resource):
                 if hasattr(item, 'unsaved_req_resp') and len(item.unsaved_req_resp) > 0:
                     for req_resp in item.unsaved_req_resp:
                         burp_rr = BurpRawRequestResponse(finding=item,
-                                                         burpRequestBase64=req_resp["req"],
-                                                         burpResponseBase64=req_resp["resp"],
+                                                         burpRequestBase64=base64.b64encode(req_resp["req"].encode("utf-8")),
+                                                         burpResponseBase64=base64.b64encode(req_resp["resp"].encode("utf-8")),
                                                          )
                         burp_rr.clean()
                         burp_rr.save()
 
                 if item.unsaved_request is not None and item.unsaved_response is not None:
                     burp_rr = BurpRawRequestResponse(finding=item,
-                                                     burpRequestBase64=item.unsaved_request,
-                                                     burpResponseBase64=item.unsaved_response,
+                                                     burpRequestBase64=base64.b64encode(item.unsaved_request.encode()),
+                                                     burpResponseBase64=base64.b64encode(item.unsaved_response.encode())
                                                      )
                     burp_rr.clean()
                     burp_rr.save()
@@ -1558,7 +1639,11 @@ class ImportScanResource(MultipartResource, Resource):
                                                                  query=endpoint.query,
                                                                  fragment=endpoint.fragment,
                                                                  product=t.engagement.product)
+                    eps, created = Endpoint_Status.objects.get_or_create(finding=item,
+                                                                         endpoint=ep)
 
+                    ep.endpoint_status.add(eps)
+                    item.endpoint_status.add(eps)
                     item.endpoints.add(ep)
                 item.save()
 
@@ -1745,7 +1830,6 @@ class ReImportScanResource(MultipartResource, Resource):
                     new_items.append(find.id)
                 else:
                     item.test = test
-                    item.date = test.target_start.date()
                     item.reporter = bundle.request.user
                     item.last_reviewed = timezone.now()
                     item.last_reviewed_by = bundle.request.user
@@ -1759,16 +1843,16 @@ class ReImportScanResource(MultipartResource, Resource):
                     if hasattr(item, 'unsaved_req_resp') and len(item.unsaved_req_resp) > 0:
                         for req_resp in item.unsaved_req_resp:
                             burp_rr = BurpRawRequestResponse(finding=find,
-                                                             burpRequestBase64=req_resp["req"],
-                                                             burpResponseBase64=req_resp["resp"],
+                                                             burpRequestBase64=base64.b64encode(req_resp["req"].encode("utf-8")),
+                                                             burpResponseBase64=base64.b64encode(req_resp["resp"].encode("utf-8")),
                                                              )
                             burp_rr.clean()
                             burp_rr.save()
 
                     if item.unsaved_request is not None and item.unsaved_response is not None:
                         burp_rr = BurpRawRequestResponse(finding=find,
-                                                         burpRequestBase64=item.unsaved_request,
-                                                         burpResponseBase64=item.unsaved_response,
+                                                         burpRequestBase64=base64.b64encode(item.unsaved_request.encode()),
+                                                         burpResponseBase64=base64.b64encode(item.unsaved_response.encode()),
                                                          )
                         burp_rr.clean()
                         burp_rr.save()
@@ -1781,6 +1865,11 @@ class ReImportScanResource(MultipartResource, Resource):
                                                                      query=endpoint.query,
                                                                      fragment=endpoint.fragment,
                                                                      product=test.engagement.product)
+                        eps, created = Endpoint_Status.objects.get_or_create(finding=find,
+                                                                             endpoint=ep)
+
+                        ep.endpoint_status.add(eps)
+                        find.endpoint_status.add(eps)
                         find.endpoints.add(ep)
 
                     if item.unsaved_tags is not None:
@@ -1792,6 +1881,7 @@ class ReImportScanResource(MultipartResource, Resource):
                 finding = Finding.objects.get(id=finding_id)
                 finding.mitigated = datetime.combine(scan_date, timezone.now().time())
                 finding.mitigated_by = bundle.request.user
+                finding.is_Mitigated = True
                 finding.active = False
                 finding.save()
                 note = Notes(entry="Mitigated by %s re-upload." % scan_type,

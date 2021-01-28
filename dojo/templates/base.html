@@ -1,6 +1,6 @@
 {% load navigation_tags %}
 {% load display_tags %}
-{% load static from staticfiles %}
+{% load static %}
 <!DOCTYPE html>
 <html lang="en">
 
@@ -109,33 +109,33 @@
             <!-- /.navbar-header -->
 
             <ul class="nav navbar-top-links navbar-right">
-              {% if request.user.is_authenticated %}
-                <li>
-                    <div class="custom-search-form">
-                        <form id="custom_search_form" role="search" method="get" action="{% url 'simple_search' %}">
-                            <div class="input-group">
-                                <input id="simple_search" type="text" name="query" class="form-control"
-                                       placeholder="Search..." value="{{clean_query}}">
-                                <span class="input-group-btn">
-                                    <button id="simple_search_submit" class="btn btn-primary" type="submit" aria-label="Search">
-                                        <i class="fa fa-search"></i>
-                                    </button>
-                                </span>
-                            </div>
-                        </form>
-                    </div>
-                    <!-- /input-group -->
-                </li>
-                <li class="dropdown">
-                    <a class="dropdown-toggle dropdown-toggle-h{{ alert_count }}" data-toggle="dropdown" href="#" aria-expanded="false" aria-label="{{ alert_count }} Alerts">
-                        <i class="fa fa-bell fa-fw"></i>
-                        <span id="alert_count" class="badge badge-count badge-count{{ alert_count }}">{{ alert_count }}</span>
-                        <i class="fa fa-caret-down"></i>
-                    </a>
-                    <ul class="dropdown-menu dropdown-alerts">
-                    </ul>
-                    <!-- /.dropdown-alerts -->
-                </li>
+                {% if request.user.is_authenticated %}
+                    <li>
+                        <div class="custom-search-form">
+                            <form id="custom_search_form" role="search" method="get" action="{% url 'simple_search' %}">
+                                <div class="input-group">
+                                    <input id="simple_search" label="simple_search" aria_label="simple_search" type="text" name="query" class="form-control"
+                                        placeholder="Search..." value="{{clean_query}}">
+                                    <span class="input-group-btn">
+                                        <button id="simple_search_submit" class="btn btn-primary" type="submit" aria-label="Search">
+                                            <i class="fa fa-search"></i>
+                                        </button>
+                                    </span>
+                                </div>
+                            </form>
+                        </div>
+                        <!-- /input-group -->
+                    </li>
+                    <li class="dropdown">
+                        <a class="dropdown-toggle dropdown-toggle-h{{ alert_count }}" data-toggle="dropdown" href="#" aria-expanded="false" aria-label="{{ alert_count }} Alerts">
+                            <i class="fa fa-bell fa-fw"></i>
+                            <span id="alert_count" class="badge badge-count badge-count{{ alert_count }}">{{ alert_count }}</span>
+                            <i class="fa fa-caret-down"></i>
+                        </a>
+                        <ul class="dropdown-menu dropdown-alerts">
+                        </ul>
+                        <!-- /.dropdown-alerts -->
+                    </li>
                 {% endif %}
                 <li class="dropdown">
                     <a class="dropdown-toggle" data-toggle="dropdown" href="#" aria-expanded="false" aria-label="User Menu">
@@ -160,6 +160,9 @@
                             {% endif %}
                         {% endblock %}
                         {% if request.user.is_authenticated %}
+                            {% if SAML2_LOGOUT_URL != '' %}
+                                <li><a href="{{ SAML2_LOGOUT_URL }}"><i class="fa fa-sign-out fa-fw"></i>SAML Logout</a></li>
+                            {% endif %}
                             <li><a href="{% url 'logout' %}"><i class="fa fa-sign-out fa-fw"></i> Logout</a></li>
                         {% endif %}
                     </ul>
@@ -238,13 +241,10 @@
                                         <i class="fa fa-bug fa-fw"></i>
                                         <span>Findings</span>
                                         <span class="glyphicon arrow"></span>
-				    </a>
+				                    </a>
                                     <ul class="nav nav-second-level">
                                         <li>
                                             <a href="{% url 'open_findings' %}">Open Findings</a>
-                                        </li>
-                                        <li>
-                                            <a href="{% url 'accepted_findings' %}">Risk Accepted Findings</a>
                                         </li>
                                         <li>
                                             <a href="{% url 'all_findings' %}">All Findings</a>
@@ -253,10 +253,24 @@
                                             <a href="{% url 'closed_findings' %}">Closed Findings</a>
                                         </li>
                                         <li>
+                                            <a href="{% url 'accepted_findings' %}">Risk Accepted Findings</a>
+                                        </li>
+                                        <li>
                                             <a href="{% url 'templates' %}">Finding Templates</a>
                                         </li>
                                     </ul>
                                     <!-- /.nav-second-level -->
+                                </li>
+                                <li>
+				                    <a href="{% url 'components' %}" id="product_component_view" aria-expanded="false"  aria-label="Components">
+                                        <i class="fa fa-th-large fa-fw"></i>
+                                        <span>Components</span>
+                                    </a>
+                                    <ul class="nav nav-second-level">
+                                        <li>
+                                            <a href="{% url 'components' %}">All Components</a>
+                                        </li>
+                                    </ul>
                                 </li>
                                 <li>
                                     <a href="{% url 'endpoints' %}" aria-expanded="false" aria-label="Endpoints">
@@ -299,8 +313,8 @@
                                     <li><a href="{% url 'critical_product_metrics' %}"> Critical Product Metrics </a></li>
                                     <li><a href="{% url 'metrics_product_type' %}"> Product Type Metrics </a></li>
                                     <li><a href="{% url 'product_type_counts' %}"> Product Type Counts </a></li>
+                                    <li><a href="{% url 'simple_metrics' %}"> Simple Metrics </a></li>
                                     {% if user.is_staff %}
-                                        <li><a href="{% url 'simple_metrics' %}"> Simple Metrics </a></li>
                                         <li><a href="{% url 'engineer_metrics' %}"> Engineer Metrics </a></li>
                                         <li><a href="{% url 'research_metrics' %}"> Security Research Metrics </a></li>
                                     {% endif %}
@@ -334,14 +348,14 @@
                                     </ul>
                                     <!-- /.nav-second-level -->
                                 </li>
-                            {% endif %}                                
+                            {% endif %}
                                 <li id="menu_configuration">
 				                    <a href="#" aria-expanded="false" aria-label="Configuration">
                                         <i class="fa fa-cog fa-fw"></i>
                                         <span>Configuration</span>
                                     </a>
                                     <ul class="nav nav-second-level">
-                                        {% if request.user.is_superuser %}                            
+                                        {% if request.user.is_superuser %}
                                         <li><a href="{% url 'cred' %}">Credential Manager </a></li>
                                         {% if system_settings.enable_jira %}
                                         <li><a href="{% url 'jira' %}">JIRA </a></li>
@@ -397,14 +411,15 @@
                     {% endwith %}
                     {% if product_tab.product.tags %}
                       <sup>
-                          {% for tag in product_tab.product.tags %}
-                          <a title="Search {{ tag }}" class="tag-label tag-color" href="{% url 'simple_search' %}?query={{ tag }}">{{ tag }}</a>
+                          {% for tag in product_tab.product.tags.all.all %}
+                          <a title="Search {{ tag }}" class="tag-label tag-color" href="{% url 'simple_search' %}?query=product-tag:{{ tag }}">{{ tag }}</a>
                           {% endfor %}
                       </sup>
                     {% endif %}
                 </h3>
                 <ul class="nav nav-tabs horizontal-bar in">
                   <li role="presentation"{% if product_tab.tab == 'overview' %} class="active"{% endif %}><a href="{% url 'view_product' product_tab.product.id %}"><span class="fa fa-globe" aria-hidden="true"></span><span class="hidden-xs"> Overview</span></a></li>
+                  <li role="presentation"{% if product_tab.tab == 'components' %} class="active"{% endif %}><a href="{% url 'view_product_components' product_tab.product.id %}"><span class="fa fa-th-large" aria-hidden="true"></span><span class="hidden-xs"> Components</span></a></li>
                   <li role="presentation"{% if product_tab.tab == 'metrics' %} class="active"{% endif %}><a href="{% url 'view_product_metrics' product_tab.product.id %}"><span class="fa fa-bar-chart" aria-hidden="true"></span><span class="hidden-xs"> Metrics</span></a></li>
                   <!-- Engagements Tab -->
                   <li role="presentation" class="dropdown{% if product_tab.tab == 'engagements' %} active active-color{% endif %}">
@@ -429,9 +444,10 @@
                     <span class="hidden-xs"> Findings{% if product_tab.findings > 0 %} <span class="badge">{{ product_tab.findings }}</span>{% endif %}</span>
                     <span class="caret"></span></a>
                     <ul class="dropdown-menu">
-                      <li><a href="{% url 'product_open_findings' product_tab.product.id %}?active=2&verified=2&false_p=3&duplicate=2&out_of_scope=1&test__engagement__product={{ product_tab.product.id }}"><i class="fa fa-list-alt"></i> View Open Findings</a></li>
-                      <li><a href="{% url 'product_open_findings' product_tab.product.id %}?active=2&verified=2&false_p=3&duplicate=2&out_of_scope=1&test__engagement__product={{ product_tab.product.id }}&severity=Critical"><i class="fa fa-exclamation-triangle"></i> View Critical Findings</a></li>
-                      <li><a href="{% url 'product_open_findings' product_tab.product.id %}?active=2&verified=2&false_p=3&duplicate=2&out_of_scope=1&test__engagement__product={{ product_tab.product.id }}&date=2"><i class="fa fa-calendar"></i> View Findings from Last 7 Days </a></li>
+                      <li><a href="{% url 'product_open_findings' product_tab.product.id %}?active=20&false_p=3&duplicate=2&out_of_scope=1&test__engagement__product={{ product_tab.product.id }}"><i class="fa fa-list-alt"></i> View Active Findings</a></li>
+                      <li><a href="{% url 'product_open_findings' product_tab.product.id %}?active=2&verified=2&false_p=3&duplicate=2&out_of_scope=1&test__engagement__product={{ product_tab.product.id }}"><i class="fa fa-list-alt"></i> View Active Verified Findings</a></li>
+                      <li><a href="{% url 'product_open_findings' product_tab.product.id %}?active=2&false_p=3&duplicate=2&out_of_scope=1&test__engagement__product={{ product_tab.product.id }}&severity=Critical"><i class="fa fa-exclamation-triangle"></i> View Critical Findings</a></li>
+                      <li><a href="{% url 'product_open_findings' product_tab.product.id %}?active=2&false_p=3&duplicate=2&out_of_scope=1&test__engagement__product={{ product_tab.product.id }}&date=2"><i class="fa fa-calendar"></i> View Findings from Last 7 Days </a></li>
                       <li role="separator" class="divider"></li>
                       <li><a href="{% url 'product_accepted_findings' product_tab.product.id %}?test__engagement__product={{ product_tab.product.id }}"><i class="fa fa-check"></i> View Risk Accepted Findings</a></li>
                       <li><a href="{% url 'product_all_findings' product_tab.product.id %}?test__engagement__product={{ product_tab.product.id }}"><i class="fa fa-search"></i> View All Findings</a></li>
@@ -617,6 +633,8 @@
                 </div>
             </div>
         </div>
+        <p id="alert_refresh" class="hidden">{{ 'ALERT_REFRESH'|setting_enabled }}</p>
+        <p id="disable_count" class="hidden">{{ 'DISABLE_ALERT_COUNTER'|setting_enabled }}</p>
     </footer>
 </div>
 
@@ -631,13 +649,28 @@
 <script src="{% static "dojo/js/cvss_calculator.js" %}"></script>
 <script type="application/javascript">
     $(document).ready(function() {
+        disable_count = document.getElementById('disable_count').innerHTML
+        refresh = document.getElementById('alert_refresh').innerHTML
+
         $('.has-popover').popover({'trigger':'hover'});
         {% if request.user.is_authenticated %}
-        $('.dropdown-toggle').click(function() { get_alerts(); });
-        setInterval(function() {
-            update_alertcount();
-        }, 10000);
+            $('.dropdown-toggle').click(function() {
+                if (disable_count == "False" || refresh == 'True') {
+                    get_alerts();
+                }
+            });
+
+            if (disable_count == "False") {
+                if(refresh == 'True') {
+                    setInterval(function() {
+                        update_alertcount();
+                    }, 10000);
+                } else {
+                    update_alertcount();
+                }
+            }
         {% endif %}
+
         function update_alertcount() {
             $.get("{% url 'alertcount' %}", function (data) {
                 if (data.count != $('#alert_count').text()) {
@@ -668,7 +701,7 @@
                   var display_description = description ? description.length < 100 ? description : jQuery.trim(description).substring(0,100).trim(this) + '...': ''
                   var dropdown_alert = "alert-list" + i;
                   $('.dropdown-alerts').append('<li><div style="padding: 3px 20px;"><i class="fa fa-' + htmlEscape(elem.fields.icon) +
-                                                ' fa-fw"></i><a href="' + htmlEscape(elem.fields.url) + '" id=' + dropdown_alert + 
+                                                ' fa-fw"></i><a href="' + htmlEscape(elem.fields.url) + '" id=' + dropdown_alert +
                                                 ' title="' + htmlEscape(display_description) + '"></a><span class="pull-right text-muted small">' +
                                                htmlEscape(elem.fields.source) + '</span></div></li><li class="divider"></li>');
                   $("#" + dropdown_alert).text(display_title);
@@ -690,6 +723,12 @@
                 $this.val($this.val().substring($this.val().lastIndexOf("/") + 1));
             }, 100);
         });
+
+        <!-- TODO not working with django tagulous which uses select2, break styling -->
+        <!-- $('#id_tags').select2({ -->
+            <!-- 'placeholder': 'Select or add some tags...', -->
+            <!-- 'no_results_text': "Tag not found, press TAB key to add.", -->
+        <!-- }); -->
 
     });
 </script>
