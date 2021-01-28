@@ -2,13 +2,16 @@ from xml.dom import NamespaceErr
 from lxml import etree
 from datetime import datetime
 from dojo.models import Finding
-from hashlib import sha256
 
 
-'''
-This parser is written for Veracode Detailed XML reports, version 1.5.
-Version is annotated in the report, `detailedreport/@report_format_version`.
-'''
+def truncate_str(value: str, maxlen: int):
+    if len(value) > maxlen:
+        return value[:maxlen - 12] + " (truncated)"
+    return value
+
+
+# This parser is written for Veracode Detailed XML reports, version 1.5.
+# Version is annotated in the report, `detailedreport/@report_format_version`.
 class VeracodeXMLParser(object):
     ns = {'x': 'https://www.veracode.com/schema/reports/export/1.0'}
     vc_severity_mapping = {
@@ -24,7 +27,7 @@ class VeracodeXMLParser(object):
             self.items = list()
             return
         try:
-            xml = etree.parse(filename)
+            xml = etree.parse(filename, etree.XMLParser(resolve_entities=False))
         except:
             raise NamespaceErr('Cannot parse this report. Make sure to upload a proper Veracode Detailed XML report.')
 
@@ -52,7 +55,7 @@ class VeracodeXMLParser(object):
                 category_node.xpath('x:recommendations/x:para/x:bulletitem/@text', namespaces=ns))))
 
             for flaw_node in category_node.xpath('.//x:staticflaws/x:flaw', namespaces=ns):
-                dupe_key = self.__xml_flaw_to_dupekey(flaw_node)
+                dupe_key = self.__xml_flaw_to_unique_id(flaw_node)
 
                 # Only process if we didn't do that before.
                 if dupe_key not in dupes:
@@ -71,15 +74,11 @@ class VeracodeXMLParser(object):
         self.items = list(dupes.values())
 
     @classmethod
-    def __xml_flaw_to_dupekey(cls, xml_node):
-        severity = cls.__xml_flaw_to_severity(xml_node)
-        try:
-            dupe_key = severity + xml_node.attrib['cweid'] + xml_node.attrib['module'] + xml_node.attrib['type'] + \
-                       xml_node.attrib['line'] + xml_node.attrib['issueid']
-        except:
-            dupe_key = severity + xml_node.attrib['cweid'] + xml_node.attrib['module'] + xml_node.attrib['type'] + \
-                       xml_node.attrib['issueid']
-        return dupe_key
+    def __xml_flaw_to_unique_id(cls, xml_node):
+        ns = cls.ns
+        app_id = xml_node.xpath('string(ancestor::x:detailedreport/@app_id)', namespaces=ns)
+        issue_id = xml_node.attrib['issueid']
+        return 'app-' + app_id + '_issue-' + issue_id
 
     @classmethod
     def __xml_flaw_to_severity(cls, xml_node):
@@ -97,6 +96,7 @@ class VeracodeXMLParser(object):
         finding.active = False
         finding.static_finding = True
         finding.dynamic_finding = False
+        finding.unique_id_from_tool = cls.__xml_flaw_to_unique_id(xml_node)
 
         # Report values
         finding.severity = cls.__xml_flaw_to_severity(xml_node)
@@ -105,18 +105,19 @@ class VeracodeXMLParser(object):
         finding.title = xml_node.attrib['categoryname']
         finding.impact = 'CIA Impact: ' + xml_node.attrib['cia_impact'].upper()
 
+        # Note that DD's legacy dedupe hashing uses the description field,
+        # so for compatibility, description field should contain very static info.
         _description = xml_node.attrib['description'].replace('. ', '.\n')
-        finding.description = _description \
-            + "\n\nVulnerable Module: " \
-            + xml_node.attrib['module'] + ' Type: ' \
-            + xml_node.attrib['type'] + ' Issue ID: ' \
-            + xml_node.attrib['issueid']
+        finding.description = _description
 
         _references = 'None'
         if 'References:' in _description:
             _references = _description[_description.index(
                 'References:') + 13:].replace(')  ', ')\n')
-        finding.references = _references
+        finding.references = _references \
+            + "\n\nVulnerable Module: " + xml_node.attrib['module'] \
+            + "\nType: " + xml_node.attrib['type'] \
+            + "\nVeracode issue ID: " + xml_node.attrib['issueid']
 
         _date_found = test.target_start
         if 'date_first_occurrence' in xml_node.attrib:
@@ -132,9 +133,11 @@ class VeracodeXMLParser(object):
             # This happens if any mitigation (including 'Potential false positive')
             # was accepted in VC.
             _is_mitigated = True
-            _mitigated_date = datetime.strptime(
-                xml_node.xpath('string(.//x:mitigations/x:mitigation[last()]/@date)', namespaces=ns),
-                '%Y-%m-%d %H:%M:%S %Z')
+            raw_mitigated_date = xml_node.xpath('string(.//x:mitigations/x:mitigation[last()]/@date)', namespaces=ns)
+            if raw_mitigated_date:
+                _mitigated_date = datetime.strptime(raw_mitigated_date, '%Y-%m-%d %H:%M:%S %Z')
+            else:
+                _mitigated_date = None
         finding.is_Mitigated = _is_mitigated
         finding.mitigated = _mitigated_date
         finding.active = not _is_mitigated
@@ -161,7 +164,7 @@ class VeracodeXMLParser(object):
         finding.sast_source_file_path = finding.file_path
 
         _component = xml_node.xpath('string(@module)') + ': ' + xml_node.xpath('string(@scope)')
-        finding.component_name = _component if _component != ': ' else None
+        finding.component_name = truncate_str(_component, 200) if _component != ': ' else None
 
         _sast_source_obj = xml_node.xpath('string(@functionprototype)')
         finding.sast_source_object = _sast_source_obj if _sast_source_obj else None
@@ -170,9 +173,7 @@ class VeracodeXMLParser(object):
 
     @classmethod
     def __xml_sca_flaw_to_dupekey(cls, xml_node):
-        return sha256(
-            ('sca_' + xml_node.attrib['vendor'] + xml_node.attrib['library'] + xml_node.attrib['version']).encode()) \
-            .hexdigest()
+        return 'sca_' + xml_node.attrib['vendor'] + xml_node.attrib['library'] + xml_node.attrib['version']
 
     @classmethod
     def __cvss_to_severity(cls, cvss):
@@ -199,6 +200,7 @@ class VeracodeXMLParser(object):
         finding.active = False
         finding.static_finding = True
         finding.dynamic_finding = False
+        finding.unique_id_from_tool = cls.__xml_sca_flaw_to_dupekey(xml_node)
 
         _library = xml_node.xpath('string(@library)', namespaces=ns)
         _vendor = xml_node.xpath('string(@vendor)', namespaces=ns)

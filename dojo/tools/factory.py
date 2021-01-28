@@ -1,4 +1,5 @@
 from dojo.tools.burp.parser import BurpXmlParser
+from dojo.tools.burp_api.parser import BurpApiParser
 from dojo.tools.dsop.parser import DsopParser
 from dojo.tools.nessus.parser import NessusCSVParser, NessusXMLParser
 from dojo.tools.nmap.parser import NmapXMLParser
@@ -41,6 +42,7 @@ from dojo.tools.sonarqube_api.importer import SonarQubeApiImporter
 from dojo.tools.clair.parser import ClairParser
 from dojo.tools.mobsf.parser import MobSFParser
 from dojo.tools.aws_scout2.parser import AWSScout2Parser
+from dojo.tools.scout_suite.parser import ScoutSuiteParser
 from dojo.tools.aws_prowler.parser import AWSProwlerParser
 from dojo.tools.brakeman.parser import BrakemanScanParser
 from dojo.tools.spotbugs.parser import SpotbugsXMLParser
@@ -64,7 +66,8 @@ from dojo.tools.microfocus_webinspect.parser import MicrofocusWebinspectXMLParse
 from dojo.tools.wpscan.parser import WpscanJSONParser
 from dojo.tools.sslscan.parser import SslscanXMLParser
 from dojo.tools.jfrogxray.parser import XrayJSONParser
-from dojo.tools.sslyze.parser import SslyzeXmlParser
+from dojo.tools.sslyze.parser_json import SSLyzeJSONParser
+from dojo.tools.sslyze.parser_xml import SSLyzeXMLParser
 from dojo.tools.testssl.parser import TestsslCSVParser
 from dojo.tools.hadolint.parser import HadolintParser
 from dojo.tools import SCAN_SONARQUBE_API
@@ -81,15 +84,22 @@ from dojo.tools.harbor_vulnerability.parser import HarborVulnerabilityParser
 from dojo.tools.github_vulnerability.parser import GithubVulnerabilityParser
 from dojo.tools.choctaw_hog.parser import ChoctawhogParser
 from dojo.tools.gitlab_sast.parser import GitlabSastReportParser
+from dojo.tools.gitlab_dep_scan.parser import GitlabDepScanReportParser
 from dojo.tools.yarn_audit.parser import YarnAuditParser
 from dojo.tools.bugcrowd.parser import BugCrowdCSVParser
 from dojo.tools.huskyci.parser import HuskyCIReportParser
 from dojo.tools.ccvs.parser import CCVSReportParser
 from dojo.tools.awssecurityhub.parser import AwsSecurityFindingFormatParser
+from dojo.tools.semgrep.parser import SemgrepJSONParser
 from dojo.tools.risk_recon.parser import RiskReconParser
 from dojo.tools.drheader.parser import DrHeaderJSONParser
 from dojo.tools.checkov.parser import CheckovParser
 from dojo.tools.kubebench.parser import KubeBenchParser
+from dojo.tools.ort.parser import OrtParser
+from dojo.tools.sarif.parser import SarifParser
+from dojo.tools.ossindex_devaudit.parser import OssIndexDevauditParser
+from dojo.tools.scantist.parser import ScantistJSONParser
+
 
 __author__ = 'Jay Paz'
 
@@ -102,6 +112,8 @@ def import_parser_factory(file, test, active, verified, scan_type=None):
         parser = BurpXmlParser(file, test)
     elif scan_type == "Burp Enterprise Scan":
         parser = BurpEnterpriseHtmlParser(file, test)
+    elif scan_type == "Burp REST API":
+        parser = BurpApiParser(file, test)
     elif scan_type == "Nessus Scan":
         filename = file.name.lower()
         if filename.endswith("csv"):
@@ -194,6 +206,8 @@ def import_parser_factory(file, test, active, verified, scan_type=None):
         parser = MobSFParser(file, test)
     elif scan_type == 'AWS Scout2 Scan':
         parser = AWSScout2Parser(file, test)
+    elif scan_type == 'Scout Suite Scan':
+        parser = ScoutSuiteParser(file, test)
     elif scan_type == 'AWS Prowler Scan':
         parser = AWSProwlerParser(file, test)
     elif scan_type == 'Brakeman Scan':
@@ -241,7 +255,9 @@ def import_parser_factory(file, test, active, verified, scan_type=None):
     elif scan_type == 'JFrog Xray Scan':
         parser = XrayJSONParser(file, test)
     elif scan_type == 'Sslyze Scan':
-        parser = SslyzeXmlParser(file, test)
+        parser = SSLyzeXMLParser(file, test)
+    elif scan_type == 'SSLyze 3 Scan (JSON)':
+        parser = SSLyzeJSONParser(file, test)
     elif scan_type == 'Testssl Scan':
         parser = TestsslCSVParser(file, test)
     elif scan_type == 'Hadolint Dockerfile check':
@@ -270,6 +286,8 @@ def import_parser_factory(file, test, active, verified, scan_type=None):
         parser = ChoctawhogParser(file, test)
     elif scan_type == 'GitLab SAST Report':
         parser = GitlabSastReportParser(file, test)
+    elif scan_type == 'GitLab Dependency Scanning Report':
+        parser = GitlabDepScanReportParser(file, test)
     elif scan_type == 'Yarn Audit Scan':
         parser = YarnAuditParser(file, test)
     elif scan_type == 'BugCrowd Scan':
@@ -280,6 +298,8 @@ def import_parser_factory(file, test, active, verified, scan_type=None):
         parser = CCVSReportParser(file, test)
     elif scan_type == 'AWS Security Hub Scan':
         parser = AwsSecurityFindingFormatParser(file, test)
+    elif scan_type == 'Semgrep JSON Report':
+        parser = SemgrepJSONParser(file, test)
     elif scan_type == 'Risk Recon API Importer':
         parser = RiskReconParser(file, test)
     elif scan_type == 'DrHeader JSON Importer':
@@ -288,6 +308,14 @@ def import_parser_factory(file, test, active, verified, scan_type=None):
         parser = CheckovParser(file, test)
     elif scan_type == 'kube-bench Scan':
         parser = KubeBenchParser(file, test)
+    elif scan_type == 'ORT evaluated model Importer':
+        parser = OrtParser(file, test)
+    elif scan_type == 'SARIF':
+        parser = SarifParser(file, test)
+    elif scan_type == 'OssIndex Devaudit SCA Scan Importer':
+        parser = OssIndexDevauditParser(file, test)
+    elif scan_type == 'Scantist Scan':
+        parser = ScantistJSONParser(file, test)
     else:
         raise ValueError('Unknown Test Type')
 

@@ -33,7 +33,7 @@ Create chart name and version as used by the chart label.
 
 
 {{/*
-  Determine the hostname to use for PostgreSQL/mySQL.
+  Determine the hostname to use for PostgreSQL/mySQL/Redis.
 */}}
 {{- define "postgresql.hostname" -}}
 {{- if eq .Values.database "postgresql" -}}
@@ -50,6 +50,28 @@ Create chart name and version as used by the chart label.
 {{- printf "%s-%s" .Release.Name "mysql" | trunc 63 | trimSuffix "-" -}}
 {{- else -}}
 {{- printf "%s" .Values.mysql.mysqlServer -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- define "redis.hostname" -}}
+{{- if eq .Values.celery.broker "redis" -}}
+{{- if .Values.redis.enabled -}}
+{{- printf "%s-%s" .Release.Name "redis-master" | trunc 63 | trimSuffix "-" -}}
+{{- else -}}
+{{- printf "%s" .Values.redis.redisServer -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+  Determine the protocol to use for Redis.
+*/}}
+{{- define "redis.scheme" -}}
+{{- if eq .Values.celery.broker "redis" -}}
+{{- if .Values.redis.transportEncryption.enabled -}}
+{{- printf "rediss" -}}
+{{- else -}}
+{{- printf "redis" -}}
 {{- end -}}
 {{- end -}}
 {{- end -}}

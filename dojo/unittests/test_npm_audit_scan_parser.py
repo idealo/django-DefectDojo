@@ -28,7 +28,7 @@ class TestNpmAuditParser(TestCase):
         parser = NpmAuditParser(testfile, Test())
         testfile.close()
         self.assertEqual(5, len(parser.items))
-        # ordering seems to be different in travis compared to local, so disable for now
+        # ordering seems to be different in ci compared to local, so disable for now
         # self.assertEqual('mime', parser.items[4].component_name)
         # self.assertEqual('1.3.4', parser.items[4].component_version)
 
@@ -39,3 +39,11 @@ class TestNpmAuditParser(TestCase):
             testfile.close()
             self.assertTrue('npm audit report contains errors:' in str(context.exception))
             self.assertTrue('ENOAUDIT' in str(context.exception))
+
+    def test_npm_audit_parser_many_vuln_npm7(self):
+        with self.assertRaises(ValueError) as context:
+            testfile = open("dojo/unittests/scans/npm_audit_sample/many_vuln_npm7.json")
+            parser = NpmAuditParser(testfile, Test())
+            testfile.close()
+            self.assertTrue('npm7 with auditReportVersion 2 or higher not yet supported' in str(context.exception))
+            self.assertEqual(parser.items, None)

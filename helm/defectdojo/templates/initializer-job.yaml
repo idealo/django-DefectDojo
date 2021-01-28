@@ -41,6 +41,10 @@ spec:
       - name: initializer
         image: "{{ template "initializer.repository" . }}:{{ .Values.tag }}"
         imagePullPolicy: {{ .Values.imagePullPolicy }}
+        {{- if .Values.securityContext.enabled }}
+        securityContext:
+          {{- toYaml .Values.securityContext.djangoSecurityContext | nindent 10 }}
+        {{- end }}          
         command:
           - /entrypoint-initializer.sh
         envFrom:
@@ -54,10 +58,10 @@ spec:
             secretKeyRef:
               {{- if eq .Values.database "postgresql" }}
               name: {{ .Values.postgresql.existingSecret }}
-              key: postgresql-password
+              key: {{ .Values.postgresql.secretKey }}
               {{- else if eq .Values.database "mysql" }}
               name: {{ .Values.mysql.existingSecret }}
-              key: mysql-password
+              key: {{ .Values.mysql.secretKey }}
               {{- end }}
         resources:
           {{- toYaml .Values.initializer.resources | nindent 10 }}
