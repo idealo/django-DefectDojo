@@ -244,14 +244,6 @@ datatables.net-buttons-dt@^1.6.5:
     datatables.net-dt "^1.10.15"
     jquery ">=1.7"
 
-datatables.net-buttons@1.6.4:
-  version "1.6.4"
-  resolved "https://registry.yarnpkg.com/datatables.net-buttons/-/datatables.net-buttons-1.6.4.tgz#51fde72c4130cb2337e40f5a6f5ad80b91a4bece"
-  integrity sha512-KxiQs1UdczsT26sptLE9P550G9QFPdwcAO9o57NHIME/lfNp9qLxL0ho0mmjQfugEBrJxqff7xGkPpK6CyKDRw==
-  dependencies:
-    datatables.net "^1.10.15"
-    jquery ">=1.7"
-
 datatables.net-buttons@1.6.5:
   version "1.6.5"
   resolved "https://registry.yarnpkg.com/datatables.net-buttons/-/datatables.net-buttons-1.6.5.tgz#e7142b928ec9f5a6f9381bb965605c12e1610954"
@@ -836,10 +828,10 @@ pdfkit@>=0.8.1, pdfkit@^0.11.0:
     linebreak "^1.0.2"
     png-js "^1.0.0"
 
-pdfmake@^0.1.68:
-  version "0.1.68"
-  resolved "https://registry.yarnpkg.com/pdfmake/-/pdfmake-0.1.68.tgz#ea8d51e1442a47468c900c0985696a6ebe8aa95f"
-  integrity sha512-oE1VEjkluro3+QqvLbFgFU/rRgyKdbPy/Fh8SS/nsUxnsiUcm85ChpmD6YD0hQW1E0d3hppAo4Yh+xdXucenIA==
+pdfmake@^0.1.70:
+  version "0.1.70"
+  resolved "https://registry.yarnpkg.com/pdfmake/-/pdfmake-0.1.70.tgz#b5102799deef264defa675dbb2dbf12ad49a9bae"
+  integrity sha512-xPhkblaQ71U97qhRTPj/1HknAHHFZ3cPRmRdrqEWD2xXBcEjEM3Yw0MIjML8DRy9Dt9n6QRjHVf662f0eLtd7Q==
   dependencies:
     iconv-lite "^0.6.2"
     linebreak "^1.0.2"
